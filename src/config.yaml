@@ -1,0 +1,51 @@
+# Model
+model:
+  in_dim: 13
+  out_dim: 3   # 3 action: buy, sell, hold
+  actor:
+    h1: 256    # h1: first hidden layer
+    h2: 128
+  critic:
+    h1: 256
+    h2: 128
+
+# Environment
+env:
+  name: TradingEnv
+  initial_balance: 1000
+  position_size: 0.001
+  episode_len: 1000
+  fee: 0.05
+  nums: 1
+
+# collector
+collector:
+  frames_per_batch: 5000
+  total_frames: 1500000
+
+# Optim
+optim:
+  lr: 0.001
+  steps_per_batch: 10
+  eps: 1.0e-6
+  weight_decay: 0.0
+  max_grad_norm: 1.0
+#  num_epochs: 10       # optimization steps per batch of data collected
+  anneal_lr: True
+
+# loss
+loss:
+  gamma: 0.98
+  gae_lambda: 0.95
+  clip_epsilon: 0.2
+  anneal_clip_epsilon: True
+  critic_coef: 1.0
+  entropy_coef: 0.05
+  loss_critic_type: smooth_l1 # l2
+
+# device
+device: cuda
+
+# log file
+log: log/env_log.csv
+
