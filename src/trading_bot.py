@@ -25,7 +25,7 @@ def main(cfg):
     device = "cpu"  #torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load data
-    loader = TradingDataLoader("data/BTCUSDT_30m.csv", from_date="2020-01-01 01:00:00", to_date="2021-01-01 01:00:00")
+    loader = TradingDataLoader("data/BTCUSDT_30m.csv", from_date="2020-01-01 01:00:00", to_date="2024-01-01 01:00:00")
     data = loader.load_data()
 
     # environment parameters
@@ -35,7 +35,8 @@ def main(cfg):
         'episode_len': cfg.env.episode_len,
         'fee': cfg.env.fee,
         'device': device,
-        'log_file': cfg.log,
+        'pos_log': cfg.log.pos_log,
+        'episode_log': cfg.log.episode_log,
     }
 
     # init environment
@@ -79,13 +80,10 @@ def main(cfg):
     scheduler = StepLR(optim, step_size=1, gamma=0.98)
 
     # Получаем текущую дату и время для уникального имени файла
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    timestamp = datetime.now().strftime('%m%d_%H%M%S')
     filepath = f"checkpoints/model_checkpoint_{timestamp}.pth"
 
-    # Инициализация writer для записи в TensorBoard
-    # writer = SummaryWriter(log_dir=f'./log/tensorboard/log_{timestamp}')
-
-    tb_logger = TensorboardLogger(f'TEnv_v2_{timestamp}', './log/tensorboard/')
+    tb_logger = TensorboardLogger(f'{timestamp}_el{cfg.env.episode_len}_sb{cfg.optim.steps_per_batch}_ec{cfg.loss.entropy_coef}', './log/tensorboard/')
 
     trainer = Trainer(
         collector=collector,

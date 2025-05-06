@@ -12,22 +12,22 @@ model:
 # Environment
 env:
   name: TradingEnv
-  initial_balance: 1000
-  position_size: 0.001
-  episode_len: 1000
-  fee: 0.05
+  initial_balance: 10000
+  position_size: 0.05
+  episode_len: 200
+  fee: 0.1
   nums: 1
 
 # collector
 collector:
-  frames_per_batch: 5000
-  total_frames: 1500000
+  frames_per_batch: 8000
+  total_frames: 3500000
 
 # Optim
 optim:
-  lr: 0.001
-  steps_per_batch: 10
-  eps: 1.0e-6
+  lr: 0.0005
+  steps_per_batch: 6
+  eps: 1.0e-5
   weight_decay: 0.0
   max_grad_norm: 1.0
 #  num_epochs: 10       # optimization steps per batch of data collected
@@ -37,15 +37,19 @@ optim:
 loss:
   gamma: 0.98
   gae_lambda: 0.95
-  clip_epsilon: 0.2
+  clip_epsilon: 0.05
   anneal_clip_epsilon: True
   critic_coef: 1.0
-  entropy_coef: 0.05
+  entropy_coef: 0.04
   loss_critic_type: smooth_l1 # l2
 
-# device
-device: cuda
-
 # log file
-log: log/env_log.csv
+log:
+  pos_log: log/env_pos_log.csv
+  episode_log: log/env_episode_log.csv
+  test_pos_log: log/test/env_pos_log.csv
+  test_episode_log: log/test/env_episode_log.csv
+
+test:
+  checkpoint_path: checkpoints/model_checkpoint_0506_095649.pth  #model_checkpoint_0506_000122.pth  #model_checkpoint_0505_200525.pth
 

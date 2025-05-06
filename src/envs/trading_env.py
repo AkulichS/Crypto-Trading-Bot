@@ -10,9 +10,6 @@ from tensordict import TensorDictBase, TensorDict
 from torchrl.data import DiscreteTensorSpec
 from torchrl.data import Bounded, Unbounded, CompositeSpec, Composite, Categorical
 
-OBS_START_INDEX = 7  # индекс (номер столбца) начала признаков входящих в observation
-PENALTY = 200.0
-
 
 class TradingEnv(EnvBase):
     metadata = {
@@ -25,12 +22,13 @@ class TradingEnv(EnvBase):
         Среда для обучения торгового агента.
 
         Args:
-            data (numpy)               Данные для обучения агента
-            initial_balance (float)    Начальный баланс агента
-            position_size (float)      Размер позиции
-            fee (float)                Размер комиссии
-            device (str)               Устройство для выполнения (cpu/gpu)
-            log_file (str, optional)   Путь к лог файлу
+            data (numpy)                   Данные для обучения агента
+            initial_balance (float)        Начальный баланс агента
+            position_size (float)          Размер позиции
+            fee (float)                    Размер комиссии
+            device (str)                   Устройство для выполнения (cpu/gpu)
+            pos_log (str, optional)        Путь к лог файлу позиций
+            episode_log (str, optional)    Путь к лог файлу эпизодов
         """
 
         super().__init__()
@@ -42,13 +40,18 @@ class TradingEnv(EnvBase):
         self.episode_len = kwargs.get("episode_len", 1000)
         self.fee = kwargs.get("fee", 0.05)  # размер комиссии в центах
         self.device = kwargs.get("device", "cpu")
-        self.log_file = kwargs.get("log_file", "env_log.csv")
+        self.pos_log = kwargs.get("pos_log", "env_pos_log.csv")
+        self.episode_log = kwargs.get("episode_log", "env_episode_log.csv")
 
         self.balance = self.initial_balance
+        self.full_balance = self.initial_balance
         self.position = 0
         self.current_step = 0   # индекс текущего сотояния
         self.episode_reward = 0.0
+        self.episodes = 0
+        self.episode_step = 0
         self.max_drawdown_threshold = self.initial_balance // 2
+        self.all_episode_rewards = []
 
         # Определение спецификаций среды:
         # 1. Определяем пространство состояний
@@ -75,22 +78,28 @@ class TradingEnv(EnvBase):
             terminated=Bounded(shape=torch.Size([1]), dtype=torch.bool, low=False, high=True, device=self.device)
         )
 
-        # Очистка содержимого файла при инициализации
-        with open(self.log_file, mode='w') as f:
-            fields = ["step", "|", "action", "|", "reward", "|", "done", "|", "terminated", "|", "episode_reward", "|", "balance"]
+        # Очистка содержимого файла при инициализации и запись заголовка
+        with open(self.pos_log, mode='w') as f:
+            fields = ["step", "|", "action", "|", "reward", "|", "done", "|", "terminated",
+                      "|", "position", "|", "episode_reward", "|", "balance", "|", "net_worth"]
+            f.write("".join(fields) + "\n")  # Открытие в режиме 'w' автоматически очищает файл
+
+        with open(self.episode_log, mode='w') as f:
+            fields = ["episode", "|", "mean_episode_reward", "|", "sum_episode_reward", "|", "positive_rate",
+                      "|", "balance", "|", "net_worth", "|", "full_balance"]
             f.write("".join(fields) + "\n")  # Открытие в режиме 'w' автоматически очищает файл
 
 
     def _reset(self, td: TensorDictBase = None, **kwargs) -> TensorDictBase:
         """Сброс среды до начального состояния. """
 
+        self.balance = self.initial_balance  # начальный баланс
         self.episode_reward = 0.0
         self.position = 0.0
-
+        self.episode_step = 0
 
         if td is not None:
             if td.get('terminated'):
-                self.balance = self.initial_balance  # начальный баланс
                 self.current_step = round(self.current_step, -3) # округление до ближайшей тысячи
 
         # Устанавливаем текущий шаг
@@ -101,7 +110,7 @@ class TradingEnv(EnvBase):
         states.update(self.full_done_spec.zero())  # обновление done_spec
 
         # Сохраняем в лог
-        if self.log_file:
+        if self.pos_log:
             self._log_step('-', 0.0, False, False)
 
         return states
@@ -121,7 +130,7 @@ class TradingEnv(EnvBase):
         states["observation"] = torch.cat([
             states["observation"],
             torch.tensor([self.position], dtype=torch.float32, device=self.device),
-            torch.tensor([self.balance / self.initial_balance], dtype=torch.float32, device=self.device)
+            torch.tensor([self.net_worth], dtype=torch.float32, device=self.device)
         ], dim=0)
 
         return states
@@ -130,29 +139,34 @@ class TradingEnv(EnvBase):
     def _step(self, td: TensorDictBase) -> TensorDictBase:
         """Выполнение действия в среде."""
 
-        action = td['action'].item()
-
         # 1. Определяем стоимость активов до выполнения действия
         previous_net_worth = self.net_worth
 
         # 2. Выполняем действие
+        action = td['action'].item()
         self._take_action(action)
 
         # 3. Переход к слудующему состоянию (именно после выполнения действия)
         self.current_step += 1
+        self.episode_step += 1
 
-        # 4. Определяем статус завершения эпизода
-        is_done, is_terminated = (False, False)
-        if self.current_step % self.episode_len == 0:
-            is_done = True  # эпизод закончен
-            is_terminated = False
-        elif self.balance < self.max_drawdown_threshold or self.current_step >= self.data.shape[0] - 1:
-            is_terminated = True  # эпизод прерван из-за ограничения баланса или конец данных
-            is_done = True        # эпизод закончен
-
-        # 5. Расчет награды
+        # 4. Расчет награды
         reward = self._calculate_reward(previous_net_worth)
         self.episode_reward += reward
+
+        net_worth = self.net_worth * self.initial_balance  # текущая стоимость активов (не нормализованная)
+
+        # 5. Определяем статус завершения эпизода
+        is_done, is_terminated = (False, False)
+        if self.current_step % self.episode_len == 0:
+            is_done, is_terminated = True, False      # эпизод закончен
+            self.episodes += 1                        # подсчет эпизодов для лога
+            self.full_balance += self.episode_reward  # состояние баланса за все эпизоды
+            self.all_episode_rewards.append(self.episode_reward)
+            self._log_episode()                       # сохраняем данные эпизода в лог
+        elif net_worth < self.max_drawdown_threshold or self.current_step >= self.data.shape[0] - 1:
+            is_terminated = True  # эпизод прерван из-за ограничения баланса или конец данных
+            is_done = True        # эпизод закончен
 
         # 6. Формирование нового состояния
         next_state = self._get_observation()
@@ -161,7 +175,7 @@ class TradingEnv(EnvBase):
         next_state.set("terminated", torch.tensor([is_terminated], dtype=self.full_done_spec['terminated'].dtype, device=self.device))
 
         # 7. Запись в лог
-        if self.log_file:
+        if self.pos_log:
             self._log_step(action, reward, is_done, is_terminated)
 
         return next_state
@@ -191,12 +205,12 @@ class TradingEnv(EnvBase):
     def _calculate_reward(self, previous_net_worth):
         current_net_worth = self.net_worth # баланс после выполнения действия
         if current_net_worth - previous_net_worth == 0:
-            return -0.001
-        return current_net_worth - previous_net_worth
+            return 0.0 # -0.001
+        return (current_net_worth - previous_net_worth) * self.initial_balance
 
     @property
     def net_worth(self):
-        return (self.balance + self.position * self.current_price) / self.initial_balance # нормализуем баланс
+        return (self.balance + abs(self.position) * self.current_price) / self.initial_balance # нормализуем баланс
 
     @property
     def current_price(self):
@@ -215,12 +229,43 @@ class TradingEnv(EnvBase):
             "line3": "|",
             "terminated": is_terminated,
             "line4": "|",
-            "episode_reward": round(self.episode_reward, 6),
+            "position": self.position,
             "line5": "|",
+            "episode_reward": round(self.episode_reward, 6),
+            "line6": "|",
             "balance": round(self.balance, 2),
+            "line7": "|",
+            "net_worth": round(self.net_worth, 4),
         }
         # Логирует строку с данными шага.
-        with open(self.log_file, "a") as f:
+        with open(self.pos_log, "a") as f:
+            values = [str(v) for v in step_data.values()]
+            f.write("".join(values) + "\n")   # Записываем строку данных
+            if is_done:
+                f.write("\n")                 # Пустая строка для отделения эпизодов
+
+    def _log_episode(self):
+        rewards = np.array(self.all_episode_rewards)
+        positive_sum = rewards[rewards > 0].sum()
+        total_abs_sum = np.abs(rewards).sum()
+        positive_rate = positive_sum / total_abs_sum if total_abs_sum > 0 else 0
+        step_data = {
+            "episode": self.episodes,
+            "line0": "|",
+            "mean_episode_reward": round(np.mean(self.all_episode_rewards), 4),
+            "line1": "|",
+            "sum_episode_reward": round(self.episode_reward, 6),
+            "line2": "|",
+            "positive_rate": round(positive_rate, 2),
+            "line3": "|",
+            "balance": round(self.balance, 2),
+            "line4": "|",
+            "net_worth": round(self.net_worth, 4),
+            "line5": "|",
+            "full_balance": round(self.full_balance, 2),
+        }
+        # Логирует строку с данными шага.
+        with open(self.episode_log, "a") as f:
             values = [str(v) for v in step_data.values()]
             f.write("".join(values) + "\n")                # Записываем строку данных
 
