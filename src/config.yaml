@@ -14,7 +14,7 @@ env:
   name: TradingEnv
   initial_balance: 10000
   position_size: 0.05
-  episode_len: 200
+  episode_len: 30
   fee: 0.1
   nums: 1
 
@@ -51,5 +51,5 @@ log:
   test_episode_log: log/test/env_episode_log.csv
 
 test:
-  checkpoint_path: checkpoints/model_checkpoint_0506_095649.pth  #model_checkpoint_0506_000122.pth  #model_checkpoint_0505_200525.pth
+  checkpoint_path: checkpoints/model_checkpoint_0506_201558.pth   #model_checkpoint_0506_095649.pth
 

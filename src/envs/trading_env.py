@@ -33,7 +33,7 @@ class TradingEnv(EnvBase):
 
         super().__init__()
 
-        assert len(data) > 500, "Размер данных должен быть больше 500!"
+        assert len(data) > 100, "Размер данных должен быть больше 500!"
         self.data = data
         self.initial_balance = kwargs.get("initial_balance", 1000)
         self.position_size = kwargs.get("position_size", 0.001)
@@ -85,8 +85,8 @@ class TradingEnv(EnvBase):
             f.write("".join(fields) + "\n")  # Открытие в режиме 'w' автоматически очищает файл
 
         with open(self.episode_log, mode='w') as f:
-            fields = ["episode", "|", "mean_episode_reward", "|", "sum_episode_reward", "|", "positive_rate",
-                      "|", "balance", "|", "net_worth", "|", "full_balance"]
+            fields = ["episode", "|", "mean_episode_reward", "|", "std_episode_reward", "|", "sum_episode_reward",
+                      "|", "positive_rate_s", "|", "positive_rate_q", "|", "balance", "|", "net_worth", "|", "full_balance"]
             f.write("".join(fields) + "\n")  # Открытие в режиме 'w' автоматически очищает файл
 
 
@@ -100,7 +100,7 @@ class TradingEnv(EnvBase):
 
         if td is not None:
             if td.get('terminated'):
-                self.current_step = round(self.current_step, -3) # округление до ближайшей тысячи
+                self.current_step = round(self.current_step, -2) # округление до ближайшей сотни
 
         # Устанавливаем текущий шаг
         self.current_step = self.current_step % len(self.data)
@@ -246,22 +246,29 @@ class TradingEnv(EnvBase):
 
     def _log_episode(self):
         rewards = np.array(self.all_episode_rewards)
-        positive_sum = rewards[rewards > 0].sum()
-        total_abs_sum = np.abs(rewards).sum()
-        positive_rate = positive_sum / total_abs_sum if total_abs_sum > 0 else 0
+        positive_sum = rewards[rewards > 0].sum()  # сумма положительных наград
+        positive_quan = np.sum(rewards > 0)        # кол-во положительных наград
+        total_abs_sum = np.abs(rewards).sum()      # сумма всех наград
+        total_quan = len(rewards)
+        positive_rate_s = positive_sum / total_abs_sum if total_abs_sum > 0 else 0
+        positive_rate_q = positive_quan / total_quan if total_quan > 0 else 0
         step_data = {
             "episode": self.episodes,
             "line0": "|",
             "mean_episode_reward": round(np.mean(self.all_episode_rewards), 4),
             "line1": "|",
-            "sum_episode_reward": round(self.episode_reward, 6),
+            "std_episode_reward": round(np.std(self.all_episode_rewards), 4),
             "line2": "|",
-            "positive_rate": round(positive_rate, 2),
+            "sum_episode_reward": round(self.episode_reward, 6),
             "line3": "|",
-            "balance": round(self.balance, 2),
+            "positive_rate_s": round(positive_rate_s, 2),
             "line4": "|",
-            "net_worth": round(self.net_worth, 4),
+            "positive_rate_q": round(positive_rate_q, 2),
             "line5": "|",
+            "balance": round(self.balance, 2),
+            "line6": "|",
+            "net_worth": round(self.net_worth, 4),
+            "line7": "|",
             "full_balance": round(self.full_balance, 2),
         }
         # Логирует строку с данными шага.

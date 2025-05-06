@@ -25,7 +25,7 @@ def main(cfg):
     device = "cpu"  #torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load data
-    loader = TradingDataLoader("data/BTCUSDT_30m.csv", from_date="2020-01-01 01:00:00", to_date="2024-01-01 01:00:00")
+    loader = TradingDataLoader("data/BTCUSDT_1d.csv", from_date="2020-01-01 01:00:00", to_date="2024-01-01 01:00:00")
     data = loader.load_data()
 
     # environment parameters

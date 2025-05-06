@@ -2,12 +2,7 @@ from omegaconf import OmegaConf
 import torch, torchrl
 from datetime import datetime
 from torchrl.collectors import SyncDataCollector
-from torchrl.objectives import ClipPPOLoss
-from torchrl.trainers import Trainer
-from torchrl.trainers import LogReward
-from torch.optim.lr_scheduler import StepLR
 from torchrl.record.loggers.tensorboard import TensorboardLogger
-
 # import environment and dataloader
 from data.data_loader import TradingDataLoader
 from envs.trading_env import TradingEnv
@@ -18,7 +13,7 @@ def main(cfg):
     device = "cpu"  #torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load data
-    loader = TradingDataLoader("data/BTCUSDT_30m.csv", from_date="2024-01-01 01:30:00", to_date="2025-01-01 01:00:00")
+    loader = TradingDataLoader("data/BTCUSDT_1d.csv", from_date="2024-01-01 01:30:00", to_date="2025-01-01 01:00:00")
     data = loader.load_data()
 
     # environment parameters
