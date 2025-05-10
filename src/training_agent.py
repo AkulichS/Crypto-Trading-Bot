@@ -25,11 +25,12 @@ def main(cfg):
     device = "cpu"  #torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load data
-    loader = TradingDataLoader("data/BTCUSDT_1d.csv", from_date="2020-01-01 01:00:00", to_date="2024-01-01 01:00:00")
-    data = loader.load_data()
+    loader = TradingDataLoader("data/BTCUSDT_1d.csv", from_date="2019-09-01 01:00:00", to_date="2024-01-01 00:30:00")
+    df = loader.load_data()
 
     # environment parameters
     params = {
+        'features_start_index': 6,
         'initial_balance': cfg.env.initial_balance,
         'position_size': cfg.env.position_size,
         'episode_len': cfg.env.episode_len,
@@ -40,9 +41,9 @@ def main(cfg):
     }
 
     # init environment
-    env = TradingEnv(data=data, **params)
+    env = TradingEnv(df=df, **params)
 
-    agent = TradingAgent(cfg, env, device)
+    agent = TradingAgent(cfg, device)
     policy_module = agent.actor
     value_module = agent.critic
 

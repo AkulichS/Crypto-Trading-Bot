@@ -19,7 +19,7 @@ class TradingDataLoader:
         self.from_date = from_date
         self.to_date = to_date
 
-    def load_data(self, return_df: bool = False):  # Загрузка данных (результат в df для графика или numpy для модели)
+    def load_data(self):  # Загрузка данных
         df = pd.read_csv(self.filename)
         df['time'] = pd.to_datetime(df['time'])
 
@@ -30,11 +30,11 @@ class TradingDataLoader:
         elif self.to_date:
             df = df[df['time'] <= self.to_date]
 
-        return self._preprocessing_data(df, return_df=return_df)
+        return self._preprocessing_data(df)
 
 
     @staticmethod
-    def _preprocessing_data(df: pd.DataFrame, return_df: bool = False):
+    def _preprocessing_data(df: pd.DataFrame):
         df = df.set_index('time')
         df[['open', 'high', 'low', 'close']] = df[['open', 'high', 'low', 'close']].astype(float)
         df['sma21'] = df['close'].rolling(window=21, min_periods=1).mean()
@@ -46,16 +46,16 @@ class TradingDataLoader:
 
         # Создание новых признаков
         # Ценовые признаки нормализуем через scale
-        df['close_norm'] = (df['close'] - low_min) / scale
+        # df['close_norm'] = (df['close'] - low_min) / scale
         df['volatility'] = (df['high'] - df['low']) / scale
         df['close_sma_diff'] = (df['close'] - df['sma21']) / scale
         df['movement_success'] = (df['close'] - df['open']) / (df['high'] - df['low']).replace(0, 1e-8)
 
         # Относительные признаки стандартизируем
-        df['return'] = df['close'].pct_change().replace(0, 1e-8)
-        df['return'] = (df['return'] - df['return'].mean()) / df['return'].std()
-        df['acceleration'] = df['return'].diff().replace(0, 1e-8)
-        df['acceleration'] = (df['acceleration'] - df['acceleration'].mean()) / df['acceleration'].std()
+        # df['pct_change'] = df['close'].pct_change().replace(0, 1e-8)
+        # df['pct_change'] = (df['pct_change'] - df['pct_change'].mean()) / df['pct_change'].std()
+        # df['acceleration'] = df['pct_change'].diff().replace(0, 1e-8)
+        # df['acceleration'] = (df['acceleration'] - df['acceleration'].mean()) / df['acceleration'].std()
         df['volume_norm'] = (df['volume'] - df['volume'].mean()) / df['volume'].std()
 
         # Индикаторы
@@ -71,10 +71,7 @@ class TradingDataLoader:
 
         df = df.ffill().bfill().astype(np.float32)  # Заполняем NaN ближайшим значением (сначала вперёд, потом назад)
 
-        features = ['close', 'close_norm', 'volatility', 'close_sma_diff', 'movement_success', 'return',
-                    'acceleration', 'volume_norm', 'RSI_14', 'MACD_12_26_9', 'MACDh_12_26_9', 'MACDs_12_26_9']
-
-        return df if return_df else df[features].to_numpy(dtype=np.float32)
+        return df
 
 
     # def plot_candlestick(self, df):

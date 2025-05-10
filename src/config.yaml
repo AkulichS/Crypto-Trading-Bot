@@ -1,6 +1,6 @@
 # Model
 model:
-  in_dim: 13
+  in_dim: 10
   out_dim: 3   # 3 action: buy, sell, hold
   actor:
     h1: 256    # h1: first hidden layer
@@ -20,13 +20,13 @@ env:
 
 # collector
 collector:
-  frames_per_batch: 8000
+  frames_per_batch: 5000
   total_frames: 3500000
 
 # Optim
 optim:
   lr: 0.0005
-  steps_per_batch: 6
+  steps_per_batch: 5
   eps: 1.0e-5
   weight_decay: 0.0
   max_grad_norm: 1.0
@@ -40,7 +40,7 @@ loss:
   clip_epsilon: 0.05
   anneal_clip_epsilon: True
   critic_coef: 1.0
-  entropy_coef: 0.04
+  entropy_coef: 0.03
   loss_critic_type: smooth_l1 # l2
 
 # log file
@@ -50,6 +50,7 @@ log:
   test_pos_log: log/test/env_pos_log.csv
   test_episode_log: log/test/env_episode_log.csv
 
+# Test
 test:
-  checkpoint_path: checkpoints/model_checkpoint_0506_201558.pth   #model_checkpoint_0506_095649.pth
+  checkpoint_path: checkpoints/model_checkpoint_0510_115131.pth
 
