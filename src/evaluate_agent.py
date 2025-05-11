@@ -54,7 +54,7 @@ def plot_candles_with_actions(data, actions):
     fig.add_trace(go.Scatter(
         x=buy_x, y=buy_y,
         mode='markers',
-        marker=dict(symbol='triangle-up', size=10, color='blue'),
+        marker=dict(symbol='triangle-up', size=10, color='green'),
         name='Buy',
         showlegend=True
     ))
@@ -87,7 +87,7 @@ def main(cfg):
     device = "cpu"  #torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load data
-    loader = TradingDataLoader("data/BTCUSDT_1d.csv", from_date="2024-01-01 01:30:00", to_date="2025-01-11 01:00:00")
+    loader = TradingDataLoader("data/BTCUSDT_30m.csv", from_date="2024-01-01 01:30:00", to_date="2025-01-11 01:00:00")
     df = loader.load_data()
 
     # environment parameters
@@ -108,6 +108,7 @@ def main(cfg):
     # Создание модели
     agent = TradingAgent(cfg, device)
     agent.actor_module.eval()  # Перевод сети в режим оценки
+
     # === Загрузка чекпойнта ===
     checkpoint_path = cfg.test.checkpoint_path
     checkpoint = torch.load(checkpoint_path, weights_only=True)
@@ -124,7 +125,7 @@ def main(cfg):
     tb_logger = TensorboardLogger(f'Test_{timestamp}', './log/tensorboard/')
 
     rewards = []
-    num_epochs = 10
+    num_epochs = 3
 
     for epoch in range(num_epochs):
         td = env.reset(to_first_step=True)

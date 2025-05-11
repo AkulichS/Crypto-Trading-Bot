@@ -32,11 +32,11 @@ class TradingAgent:
 
     def _build_actor(self):
         return ProbabilisticActor(
-            module=self.actor_module,
+            module=self.actor_module,        # нейросеть actor_net обернутая в TensorDictModule для доступности TensorDict
             spec=self.action_spec,
-            in_keys={"logits": "logits"},
+            in_keys={"logits": "logits"},    # ключ logits для распределения
             distribution_class=Categorical,
-            return_log_prob=True
+            return_log_prob=True             # возвращать логарифм вероятности для PPO
         )
 
     def _build_critic(self):
@@ -59,49 +59,6 @@ class TradingAgent:
             td_out = self.actor_module(obs_td)         # Получаем logits напрямую
             logits = td_out["logits"]
             probs = torch.softmax(logits, dim=-1)      # Превращаем в вероятности
-            return torch.argmax(probs, dim=-1).item()  # Действие с максимальной вероятностью
+            return torch.argmax(probs, dim=-1)         # Действие с максимальной вероятностью
 
-
-# class TradingAgent:
-#     def __init__(self, cfg, device='cpu'):
-#         self.cfg = cfg
-#         self.device = device
-#         self.action_spec = DiscreteTensorSpec(cfg.model.out_dim)
-#         self.actor = self._build_actor()
-#         self.critic = self._build_critic()
-#
-#     def _build_actor(self):
-#         actor_net = nn.Sequential(
-#             nn.Linear(self.cfg.model.in_dim, self.cfg.model.actor.h1, device=self.device),
-#             nn.ReLU(),
-#             nn.Linear(self.cfg.model.actor.h1, self.cfg.model.actor.h2, device=self.device),
-#             nn.ReLU(),
-#             nn.Linear(self.cfg.model.actor.h2, self.cfg.model.out_dim, device=self.device),
-#         )
-#         self.actor_module = TensorDictModule(
-#             module=actor_net,
-#             in_keys=["observation"],
-#             out_keys=["logits"]
-#         )
-#         return ProbabilisticActor(
-#             module=self.actor_module,           # нейросеть actor_net обернутая в TensorDictModule для доступности TensorDict
-#             spec=self.action_spec,
-#             in_keys={"logits": "logits"},       # ключ logits для распределения
-#             distribution_class=Categorical,
-#             return_log_prob=True                # возвращать логарифм вероятности для PPO
-#         )
-#
-#     def _build_critic(self):
-#         critic_net = nn.Sequential(
-#             # nn.Flatten(start_dim=-2),
-#             nn.Linear(self.cfg.model.in_dim, self.cfg.model.critic.h1, device=self.device),
-#             nn.ReLU(),
-#             nn.Linear(self.cfg.model.critic.h1, self.cfg.model.critic.h2, device=self.device),
-#             nn.ReLU(),
-#             nn.Linear(self.cfg.model.critic.h2, 1, device=self.device),
-#         )
-#         return ValueOperator(
-#             module=critic_net,
-#             in_keys=["observation"]
-#         )
 

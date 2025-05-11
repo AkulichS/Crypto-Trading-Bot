@@ -50,7 +50,7 @@ class TradingEnv(EnvBase):
         self.episodes = 0
         self.episode_step = 0
         self.position_price = 0
-        self.stop_loss = 100
+        self.stop_loss = 50
         self.max_drawdown_threshold = self.initial_balance // 2
         self.all_episode_rewards = []
         self.is_episode_end = False
@@ -161,7 +161,7 @@ class TradingEnv(EnvBase):
         # 2. Выполняем действие
         action = td['action'].item()
 
-        if self.episode_reward <= -self.stop_loss or self.episode_reward >= 500:  # если сработал stop-loss или take-profit
+        if self.episode_reward <= -self.stop_loss or self.episode_reward >= 300:  # если сработал stop-loss или take-profit
             is_done, self.is_episode_end = True, True
             if self.position > 0:
                 action = 2   # закрыть позицию sell
