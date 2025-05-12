@@ -125,7 +125,7 @@ def main(cfg):
     tb_logger = TensorboardLogger(f'Test_{timestamp}', './log/tensorboard/')
 
     rewards = []
-    num_epochs = 3
+    num_epochs = 1
 
     for epoch in range(num_epochs):
         td = env.reset(to_first_step=True)

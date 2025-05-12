@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import torch
 from torchrl.envs import EnvBase
 from tensordict import TensorDictBase, TensorDict
@@ -30,11 +31,14 @@ class TradingEnv(EnvBase):
         super().__init__()
 
         assert len(df) > 100, "Размер данных должен быть больше 500!"
+        self.initial_balance = kwargs.get("initial_balance", 1000)
         self.df = df
+        self.df['position'] = 0
+        self.df['net_worth'] = self.initial_balance
         start_index = kwargs.get("features_start_index", 0)
         features = ['close'] + list(self.df.columns[start_index:])
         self.data = df[features].to_numpy(dtype=np.float32)
-        self.initial_balance = kwargs.get("initial_balance", 1000)
+        self.window_size = kwargs.get("window_size", 20)
         self.position_size = kwargs.get("position_size", 0.001)
         self.episode_len = kwargs.get("episode_len", len(self.data)-1)
         self.fee = kwargs.get("fee", 0.05)  # размер комиссии в центах
@@ -50,7 +54,7 @@ class TradingEnv(EnvBase):
         self.episodes = 0
         self.episode_step = 0
         self.position_price = 0
-        self.stop_loss = 50
+        self.stop_loss = 100
         self.max_drawdown_threshold = self.initial_balance // 2
         self.all_episode_rewards = []
         self.is_episode_end = False
@@ -59,7 +63,7 @@ class TradingEnv(EnvBase):
         # 1. Определяем пространство состояний
         self.observation_spec = CompositeSpec({
             "observation": Unbounded(
-                shape=torch.Size([self.data.shape[1]-1]),  # Размер наблюдения, кол-во признаков - 1 (Close)
+                shape=torch.Size([self.window_size, self.data.shape[1]-1]),  # Размер наблюдения, кол-во признаков - 1 (Close)
                 dtype=torch.float32,  # Тип данных
                 device=self.device    # Устройство
             )
@@ -101,15 +105,11 @@ class TradingEnv(EnvBase):
         self.episode_step = 0
         self.is_episode_end = False
 
-        # if td is not None:
-        #     if td.get('terminated'):
-        #         self.current_step = round(self.current_step, -2) # округление до ближайшей сотни
-
-        # Устанавливаем текущий шаг
-        if kwargs.get("to_first_step", False):   # сброс в начало, иначе со следующего шага
-            self.current_step = 0
+        # Устанавливаем текущий шаг (устанавливается на правый край окна)
+        if kwargs.get("to_first_step", False):   # сброс в начало, иначе со следующего шага (для теста)
+            self.current_step = self.window_size
         else:
-            self.current_step = self.current_step % (len(self.data)-1)
+            self.current_step = np.max([self.current_step % (self.data.shape[0]-1), self.window_size])
 
         # Получаем состояние
         states = self._get_observation()
@@ -123,28 +123,30 @@ class TradingEnv(EnvBase):
 
 
     def _get_observation(self):
+        if self.position > 0:
+            self.data[self.current_step, -2] = 1
+        elif self.position < 0:
+            self.data[self.current_step, -2] = -1
+        else:
+            self.data[self.current_step, -2] = 0
+
+        self.data[self.current_step, -1] = self.net_worth / self.initial_balance
+
         # Извлекаем данные для текущего состояния
         states = TensorDict({
-            "observation": torch.tensor(
-                self.data[self.current_step, 1:],  # берем текущую строку признаков, исключая close
+            "observation": torch.tensor(   # берем window_size строк признаков, исключая close
+                self.data[self.current_step+1 - self.window_size: self.current_step+1, 1:],
                 dtype=self.observation_spec["observation"].dtype,
                 device=self.device,
             ),
         }, device=self.device)
 
-        if self.position > 0:
-            position = 1
-        elif self.position < 0:
-            position = -1
-        else:
-            position = 0
-
         # Добавляем в наблюдение баланс и позицию (buy/sell/hold)
-        states["observation"] = torch.cat([
-            states["observation"],
-            torch.tensor([position], dtype=torch.float32, device=self.device),
-            torch.tensor([self.net_worth / self.initial_balance], dtype=torch.float32, device=self.device)
-        ], dim=0)
+        # states["observation"] = torch.cat([
+        #     states["observation"],
+        #     torch.tensor([position], dtype=torch.float32, device=self.device),
+        #     torch.tensor([self.net_worth / self.initial_balance], dtype=torch.float32, device=self.device)
+        # ], dim=0)
 
         return states
 
@@ -161,7 +163,7 @@ class TradingEnv(EnvBase):
         # 2. Выполняем действие
         action = td['action'].item()
 
-        if self.episode_reward <= -self.stop_loss or self.episode_reward >= 300:  # если сработал stop-loss или take-profit
+        if self.episode_reward <= -self.stop_loss or self.episode_reward >= 500:  # если сработал stop-loss или take-profit
             is_done, self.is_episode_end = True, True
             if self.position > 0:
                 action = 2   # закрыть позицию sell
@@ -178,14 +180,12 @@ class TradingEnv(EnvBase):
         self.episode_reward += reward
 
         # 5. Определяем статус завершения эпизода
-
         if self.current_step % self.episode_len == 0 or self.is_episode_end:
             is_done, is_terminated = True, False      # эпизод закончен
             self.episodes += 1                        # подсчет эпизодов для лога
             self.full_balance += self.episode_reward  # состояние баланса за все эпизоды
             self.all_episode_rewards.append(self.episode_reward)
             self._log_episode()                       # сохраняем данные эпизода в лог
-
         elif self.net_worth < self.max_drawdown_threshold or self.current_step >= self.data.shape[0] - 1:
             is_terminated = True  # эпизод прерван из-за ограничения баланса или конец данных
             is_done = True        # эпизод закончен
@@ -209,11 +209,11 @@ class TradingEnv(EnvBase):
                 if self.position == 0:   # если нет позиции, то открываем buy
                     self.position = self.position_size
                     self.position_price = self.current_price
-                    self.balance -= self.position * self.current_price + self.fee
+                    self.balance -= self.position * self.current_price + self.get_fee
 
                 elif self.position < 0:  # если имеется позиция sell, то закрываем ее
                     # balance = текущий баланс + стоимость позиции по исходной цене продажи - комиссия
-                    self.balance += abs(self.position) * self.position_price - self.fee
+                    self.balance += abs(self.position) * self.position_price - self.get_fee
                     self.position = 0.0
                     self.position_price = 0.0
 
@@ -221,11 +221,11 @@ class TradingEnv(EnvBase):
                 if self.position == 0:  # если нет позиции, то открываем sell
                     self.position = -self.position_size
                     self.position_price = self.current_price
-                    self.balance -= abs(self.position) * self.current_price + self.fee
+                    self.balance -= abs(self.position) * self.current_price + self.get_fee
 
                 elif self.position > 0:  # если имеется позиция buy, то закрываем ее
                     # balance = текущий баланс + стоимость позиции по исходной цене покупки - комиссия
-                    self.balance += self.position * self.position_price - self.fee
+                    self.balance += self.position * self.position_price - self.get_fee
                     self.position = 0.0
                     self.position_price = 0.0
 
@@ -240,6 +240,10 @@ class TradingEnv(EnvBase):
         self.episode_step += 1
         if self.position != 0:   # если есть позиция, то обновляем баланс на дельту цены
             self.balance += self.price_delta * self.position
+
+    @property
+    def get_fee(self):
+        return (self.fee / 100) * abs(self.position) * self.current_price
 
     @property
     def current_price(self):

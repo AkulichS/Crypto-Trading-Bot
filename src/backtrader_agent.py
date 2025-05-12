@@ -15,7 +15,7 @@ from agents.trading_agent import TradingAgent
 class CustomPandasData(bt.feeds.PandasData):
     # Добавляем дополнительные линии
     lines = ('volatility', 'close_sma_diff', 'movement_success',
-             'volume_norm', 'RSI_14', 'MACD_12_26_9', 'MACDh_12_26_9', 'MACDs_12_26_9')
+             'volume_norm', 'RSI_14', 'MACD_12_26_9', 'MACDh_12_26_9', 'MACDs_12_26_9', 'position', 'net_worth')
 
     # Связываем дополнительные линии с соответствующими столбцами DataFrame
     params = (
@@ -28,6 +28,8 @@ class CustomPandasData(bt.feeds.PandasData):
         ('MACD_12_26_9', None),
         ('MACDh_12_26_9', None),
         ('MACDs_12_26_9', None),
+        ('position', None),
+        ('net_worth', None),
     )
 
 # Backtrader
@@ -48,39 +50,63 @@ class PPOAgentStrategy(bt.Strategy):
         }
         # Загрузка извлеченных весов в actor_net
         self.agent.actor_module.load_state_dict(actor_weights, strict=False)
-        self.pos_size = 0.05
+        self.pos_size = cfg.env.position_size
 
 
     def log(self, txt):
         dtime = (datetime(1, 1, 1) + timedelta(days=self.data.datetime[0] - 1)).strftime('%Y-%m-%d %H:%M:%S')
         print(f'{dtime}:  {txt}')
 
+    def _update_position(self):
+        if self.position.size > 0:
+            self.data.position[0] = 1
+        elif self.position.size < 0:
+            self.data.position[0] = -1
+        else:
+            self.data.position[0] = 0
+
 
     def next(self):
+        # Проверяем, достаточно ли данных для формирования окна из 10 свечей
+        if len(self.data) < cfg.env.window_size:
+            print('пропуск ', self.data.datetime[0], self.data.close[0])
+            return  # Пропускаем шаг, пока данных недостаточно
+
         # Формируем входные данные для модели
-        current_price = self.datas[0].close[-1]  # текущая цена
-        position_size = self.position.size  # текущая позиция (в лотах)
-        balance = self.broker.get_cash()  # доступные средства (кэш)
-        initial_balance = self.broker.startingcash
-        # net_worth = (balance + abs(position) * price) / initial_balance
-        net_worth = (balance + abs(position_size) * current_price) / initial_balance
+        # current_price = self.datas[0].close[-1]  # текущая цена
+        # balance = self.broker.get_cash()  # доступные средства (кэш)
+        # net_worth = self.broker.get_value() / self.broker.startingcash  # (balance + abs(position_size) * current_price) / initial_balance
 
         # Подготовка наблюдения
-        obs = np.array([
-            # self.datas[0].close_norm[-1],
-            self.datas[0].volatility[-1],
-            self.datas[0].close_sma_diff[-1],
-            self.datas[0].movement_success[-1],
-            # self.datas[0].pct_change[-1],
-            # self.datas[0].acceleration[-1],
-            self.datas[0].volume_norm[-1],
-            self.datas[0].RSI_14[-1],
-            self.datas[0].MACD_12_26_9[-1],
-            self.datas[0].MACDh_12_26_9[-1],
-            self.datas[0].MACDs_12_26_9[-1],
-            position_size,
-            net_worth
-        ], dtype=np.float32)
+        self._update_position()
+        self.data.net_worth[0] = self.broker.get_value() / self.broker.startingcash
+        obs = []
+        for i in range(-(cfg.env.window_size-1), 1):  # Последние 20 свечей, включая текущую
+            obs.append([
+                self.data.volatility[i],
+                self.data.close_sma_diff[i],
+                self.data.movement_success[i],
+                self.data.volume_norm[i],
+                self.data.RSI_14[i],
+                self.data.MACD_12_26_9[i],
+                self.data.MACDh_12_26_9[i],
+                self.data.MACDs_12_26_9[i],
+                self.data.position[i],
+                self.data.net_worth[i],
+            ])
+
+        # obs = np.array([
+        #     self.datas[0].volatility[-1],
+        #     self.datas[0].close_sma_diff[-1],
+        #     self.datas[0].movement_success[-1],
+        #     self.datas[0].volume_norm[-1],
+        #     self.datas[0].RSI_14[-1],
+        #     self.datas[0].MACD_12_26_9[-1],
+        #     self.datas[0].MACDh_12_26_9[-1],
+        #     self.datas[0].MACDs_12_26_9[-1],
+        #     position_size,
+        #     net_worth
+        # ], dtype=np.float32)
 
         obs_tensor = torch.tensor(obs, dtype=torch.float32).to(self.device).unsqueeze(0)  # батч из одного элемента
         # obs_td = TensorDict({"observation": obs_tensor}, device=self.device)
@@ -93,36 +119,38 @@ class PPOAgentStrategy(bt.Strategy):
         # Действия агента
         if prediction == 1:  # Покупка
             if self.position.size == 0.0:  # Нет позиции, просто покупаем.0
-                # self.buy(size=self.pos_size)
+                self.buy(size=self.pos_size)
                 # Выполняем покупку с установкой стоп-лосса и тейк-профита
-                self.buy_bracket(
-                    size=self.pos_size,
-                    # limitprice=self.data.close[0] * 1.1,
-                    price=self.data.close[0],
-                    stopprice=self.data.close[0] * 0.9,
-                    exectype=bt.Order.Market,   # bt.Order.Limit,
-                    # exectype=bt.Order.Market  # Исполнение по рыночным ценам
-                )
+                # self.buy_bracket(
+                #     size=self.pos_size,
+                #     # limitprice=self.data.close[0] * 1.1,
+                #     price=self.data.close[0],
+                #     stopprice=self.data.close[0] * 0.9,
+                #     exectype=bt.Order.Market,   # bt.Order.Limit,
+                #     # exectype=bt.Order.Market  # Исполнение по рыночным ценам
+                # )
                 print(f"Покупка: цена {self.data.close[0]}")
+
             elif self.position.size < 0.0:  # Закрываем позицию продажи перед покупкой
                 self.close()
                 print(f"Закрытие продажи: цена {self.position.price}")
 
         elif prediction == 2:  # Продажа
             if self.position.size == 0.0:  # Нет позиции, просто продаем
-                # self.sell(size=self.pos_size)
+                self.sell(size=self.pos_size)
                 # Выполняем продажу с установкой стоп-лосса и тейк-профита
-                self.sell_bracket(
-                    size=self.pos_size,
-                    # limitprice=self.data.close[0] * 0.98,
-                    price=self.data.close[0],
-                    stopprice=self.data.close[0] * 1.1,
-                    exectype=bt.Order.Market,  # bt.Order.Limit,
-                )
+                # self.sell_bracket(
+                #     size=self.pos_size,
+                #     # limitprice=self.data.close[0] * 0.98,
+                #     price=self.data.close[0],
+                #     stopprice=self.data.close[0] * 1.1,
+                #     exectype=bt.Order.Market,  # bt.Order.Limit,
+                # )
                 print(f"Продажа: цена {self.data.close[0]}")
             elif self.position.size > 0.0:  # Закрываем позицию покупки перед продажей
                 self.close()
                 print(f"Закрытие покупки: цена {self.position.price}")
+
 
 
     # def notify_order(self, order):
@@ -158,6 +186,11 @@ def print_metrics(strat):
     print(f"Total Trades: {total}")
     print(f"Win Rate [%]: {win_rate:.2f}")
 
+    won_gross = trades.won.get('pnl', {}).get('total', 0)         # суммарная прибыль по выигранным сделкам
+    lost_gross = abs(trades.lost.get('pnl', {}).get('total', 0))  # абсолютное значение убытков
+    win_rate_amount = (won_gross / (won_gross + lost_gross) * 100) if (won_gross + lost_gross) > 0 else 0
+    print(f"Win Rate amount [%]: {win_rate_amount:.2f}")
+
     net_pnl = trades.pnl.net.get('total', 0)
     print(f"Net Profit: {net_pnl:.2f}")
 
@@ -173,9 +206,11 @@ def main(cfg):
     device = "cpu"
 
     # Load data
-    loader = TradingDataLoader("data/BTCUSDT_1d.csv", from_date="2024-01-01 01:30:00", to_date="2025-01-01 01:00:00")
+    loader = TradingDataLoader("data/BTCUSDT_1d_.csv", from_date="2021-11-11 01:00:00", to_date="2023-07-01 01:00:00")
     df = loader.load_data()
-    pd.set_option('display.width', 1000)  # Устанавливаем ширину вывода
+    df['position'] = 0
+    df['net_worth'] = cfg.env.initial_balance
+    # pd.set_option('display.width', 1000)  # Устанавливаем ширину вывода
     # print(df.head())
 
     # Подготовка данных для Backtrader
@@ -195,6 +230,8 @@ def main(cfg):
         MACD_12_26_9="MACD_12_26_9",
         MACDh_12_26_9="MACDh_12_26_9",
         MACDs_12_26_9="MACDs_12_26_9",
+        position="position",
+        net_worth="net_worth",
         timeframe=bt.TimeFrame.Days,
         compression=1  # Компрессия: 1 день
     )
@@ -203,7 +240,7 @@ def main(cfg):
     cerebro = bt.Cerebro()
     cerebro.adddata(bt_data)
     cerebro.addstrategy(PPOAgentStrategy, cfg=cfg, device=device)
-    cerebro.broker.setcash(10000)  # Устанавливаем стартовый капитал
+    cerebro.broker.setcash(cfg.env.initial_balance)  # Устанавливаем стартовый капитал
     cerebro.broker.setcommission(commission=0.0001)
 
     cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')

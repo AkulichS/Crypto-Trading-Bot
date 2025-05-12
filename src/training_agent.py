@@ -31,6 +31,7 @@ def main(cfg):
     # environment parameters
     params = {
         'features_start_index': 6,
+        'window_size': cfg.env.window_size,
         'initial_balance': cfg.env.initial_balance,
         'position_size': cfg.env.position_size,
         'episode_len': cfg.env.episode_len,

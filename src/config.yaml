@@ -15,9 +15,10 @@ model:
 # Environment
 env:
   name: TradingEnv
+  window_size: 50
   initial_balance: 10000
   position_size: 0.05
-  episode_len: 50
+  episode_len: 90
   fee: 0.1
   nums: 1
 
@@ -55,5 +56,5 @@ log:
 
 # Test
 test:
-  checkpoint_path: checkpoints/model_checkpoint_0510_115131.pth  # model_checkpoint_0510_145359.pth  # 30m
+  checkpoint_path: checkpoints/model_checkpoint_0512_020319.pth  # model_checkpoint_0510_115131.pth  # 1d   # model_checkpoint_0510_145359.pth  # 30m
 
