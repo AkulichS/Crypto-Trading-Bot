@@ -25,7 +25,7 @@ def main(cfg):
     device = "cpu"  #torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load data
-    loader = TradingDataLoader("data/BTCUSDT_1d.csv", from_date="2020-01-01 03:00:00", to_date="2024-01-01 03:00:00")
+    loader = TradingDataLoader("data/BTCUSDT_1h.csv", from_date="2020-01-01 03:00:00", to_date="2024-01-01 03:00:00")
     df = loader.load_data()
 
     # environment parameters
@@ -36,6 +36,8 @@ def main(cfg):
         'position_size': cfg.env.position_size,
         'episode_len': cfg.env.episode_len,
         'fee': cfg.env.fee,
+        'stop_loss': cfg.env.stop_loss,
+        'take_profit': cfg.env.take_profit,
         'device': device,
         'pos_log': cfg.log.pos_log,
         'episode_log': cfg.log.episode_log,

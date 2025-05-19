@@ -47,7 +47,7 @@ class PPOAgentStrategy(bt.Strategy):
         }
         # Загрузка извлеченных весов в actor_net
         self.agent.actor_module.load_state_dict(actor_weights, strict=False)
-        self.pos_size = cfg.env.position_size
+        self.pos_size = cfg.env.test.position_size
 
 
     def log(self, txt):
@@ -190,7 +190,7 @@ def main(cfg):
     device = "cpu"
 
     # Load data
-    loader = TradingDataLoader("data/BTCUSDT_1d.csv", from_date="2024-01-01 03:00:00", to_date="2025-05-13 03:00:00")   # BTCUSDT_1d_.csv
+    loader = TradingDataLoader("data/BNBUSDT_1h.csv", from_date="2020-01-01 03:00:00", to_date="2025-06-07 03:00:00")   # BTCUSDT_1d_.csv
     df = loader.load_data()
     df['position'] = 0
     df['net_worth'] = cfg.env.initial_balance

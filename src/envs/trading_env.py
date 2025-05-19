@@ -42,6 +42,8 @@ class TradingEnv(EnvBase):
         self.position_size = kwargs.get("position_size", 0.001)
         self.episode_len = kwargs.get("episode_len", len(self.data)-1)
         self.fee = kwargs.get("fee", 0.05)  # размер комиссии в центах
+        self.stop_loss = kwargs.get("stop_loss", 200)
+        self.take_profit = kwargs.get("take_profit", 500)
         self.device = kwargs.get("device", "cpu")
         self.pos_log = kwargs.get("pos_log", "env_pos_log.csv")
         self.episode_log = kwargs.get("episode_log", "env_episode_log.csv")
@@ -54,7 +56,6 @@ class TradingEnv(EnvBase):
         self.episodes = 0
         self.episode_step = 0
         self.position_price = 0
-        self.stop_loss = 100
         self.max_drawdown_threshold = self.initial_balance // 2
         self.all_episode_rewards = []
         self.is_episode_end = False
@@ -156,7 +157,7 @@ class TradingEnv(EnvBase):
         # 2. Выполняем действие
         action = td['action'].item()
 
-        if self.episode_reward <= -self.stop_loss or self.episode_reward >= 500:  # если сработал stop-loss или take-profit
+        if self.episode_reward <= -self.stop_loss or self.episode_reward >= self.take_profit:  # если сработал stop-loss или take-profit
             is_done, self.is_episode_end = True, True
             if self.position > 0:
                 action = 2   # закрыть позицию sell
