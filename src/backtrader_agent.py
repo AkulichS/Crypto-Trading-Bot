@@ -14,20 +14,17 @@ from agents.trading_agent import TradingAgent
 
 class CustomPandasData(bt.feeds.PandasData):
     # Добавляем дополнительные линии
-    lines = ('volatility', 'close_sma_diff', 'movement_success',
-             'volume_norm', 'RSI_14', 'MACD_12_26_9', 'MACDh_12_26_9', 'MACDs_12_26_9', 'position', 'net_worth')
+    lines = ('z_close_long', 'z_close_short', 'z_high_tail', 'z_low_tail', 'z_adx_diff', 'sma_14', 'z_close_diff', 'position', 'net_worth')
 
     # Связываем дополнительные линии с соответствующими столбцами DataFrame
     params = (
-        # ('close_norm', None),
-        ('volatility', None),
-        ('close_sma_diff', None),
-        ('movement_success', None),
-        ('volume_norm', None),
-        ('RSI_14', None),
-        ('MACD_12_26_9', None),
-        ('MACDh_12_26_9', None),
-        ('MACDs_12_26_9', None),
+        ('z_close_long', None),
+        ('z_close_short', None),
+        ('z_high_tail', None),
+        ('z_low_tail', None),
+        ('z_adx_diff', None),
+        ('sma_14', None),
+        ('z_close_diff', None),
         ('position', None),
         ('net_worth', None),
     )
@@ -83,30 +80,17 @@ class PPOAgentStrategy(bt.Strategy):
         obs = []
         for i in range(-(cfg.env.window_size-1), 1):  # Последние 20 свечей, включая текущую
             obs.append([
-                self.data.volatility[i],
-                self.data.close_sma_diff[i],
-                self.data.movement_success[i],
-                self.data.volume_norm[i],
-                self.data.RSI_14[i],
-                self.data.MACD_12_26_9[i],
-                self.data.MACDh_12_26_9[i],
-                self.data.MACDs_12_26_9[i],
+                self.data.z_close_long[i],
+                self.data.z_close_short[i],
+                self.data.volume[i],
+                self.data.z_high_tail[i],
+                self.data.z_low_tail[i],
+                self.data.z_adx_diff[i],
+                self.data.sma_14[i],
+                self.data.z_close_diff[i],
                 self.data.position[i],
                 self.data.net_worth[i],
             ])
-
-        # obs = np.array([
-        #     self.datas[0].volatility[-1],
-        #     self.datas[0].close_sma_diff[-1],
-        #     self.datas[0].movement_success[-1],
-        #     self.datas[0].volume_norm[-1],
-        #     self.datas[0].RSI_14[-1],
-        #     self.datas[0].MACD_12_26_9[-1],
-        #     self.datas[0].MACDh_12_26_9[-1],
-        #     self.datas[0].MACDs_12_26_9[-1],
-        #     position_size,
-        #     net_worth
-        # ], dtype=np.float32)
 
         obs_tensor = torch.tensor(obs, dtype=torch.float32).to(self.device).unsqueeze(0)  # батч из одного элемента
         # obs_td = TensorDict({"observation": obs_tensor}, device=self.device)
@@ -123,9 +107,9 @@ class PPOAgentStrategy(bt.Strategy):
                 # Выполняем покупку с установкой стоп-лосса и тейк-профита
                 # self.buy_bracket(
                 #     size=self.pos_size,
-                #     # limitprice=self.data.close[0] * 1.1,
+                #     # limitprice=self.data.close[0] * 1.4,
                 #     price=self.data.close[0],
-                #     stopprice=self.data.close[0] * 0.9,
+                #     stopprice=self.data.close[0] * 0.8,
                 #     exectype=bt.Order.Market,   # bt.Order.Limit,
                 #     # exectype=bt.Order.Market  # Исполнение по рыночным ценам
                 # )
@@ -141,9 +125,9 @@ class PPOAgentStrategy(bt.Strategy):
                 # Выполняем продажу с установкой стоп-лосса и тейк-профита
                 # self.sell_bracket(
                 #     size=self.pos_size,
-                #     # limitprice=self.data.close[0] * 0.98,
+                #     # limitprice=self.data.close[0] * 0.6,
                 #     price=self.data.close[0],
-                #     stopprice=self.data.close[0] * 1.1,
+                #     stopprice=self.data.close[0] * 1.2,
                 #     exectype=bt.Order.Market,  # bt.Order.Limit,
                 # )
                 print(f"Продажа: цена {self.data.close[0]}")
@@ -206,7 +190,7 @@ def main(cfg):
     device = "cpu"
 
     # Load data
-    loader = TradingDataLoader("data/BTCUSDT_1d_.csv", from_date="2021-11-11 01:00:00", to_date="2023-07-01 01:00:00")
+    loader = TradingDataLoader("data/BTCUSDT_1d.csv", from_date="2024-01-01 03:00:00", to_date="2025-05-13 03:00:00")   # BTCUSDT_1d_.csv
     df = loader.load_data()
     df['position'] = 0
     df['net_worth'] = cfg.env.initial_balance
@@ -222,14 +206,14 @@ def main(cfg):
         low="low",
         close="close",
         # volume="volume",
-        volatility="volatility",
-        close_sma_diff="close_sma_diff",
-        movement_success="movement_success",
-        volume_norm="volume_norm",
-        RSI_14="RSI_14",
-        MACD_12_26_9="MACD_12_26_9",
-        MACDh_12_26_9="MACDh_12_26_9",
-        MACDs_12_26_9="MACDs_12_26_9",
+        z_close_long="z_close_long",
+        z_close_short="z_close_short",
+        volume="volume",
+        z_high_tail="z_high_tail",
+        z_low_tail="z_low_tail",
+        z_adx_diff="z_adx_diff",
+        sma_14="sma_14",
+        z_close_diff="z_close_diff",
         position="position",
         net_worth="net_worth",
         timeframe=bt.TimeFrame.Days,
@@ -241,7 +225,7 @@ def main(cfg):
     cerebro.adddata(bt_data)
     cerebro.addstrategy(PPOAgentStrategy, cfg=cfg, device=device)
     cerebro.broker.setcash(cfg.env.initial_balance)  # Устанавливаем стартовый капитал
-    cerebro.broker.setcommission(commission=0.0001)
+    cerebro.broker.setcommission(commission=0.0005)
 
     cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')
     cerebro.addanalyzer(bt.analyzers.DrawDown, _name='drawdown')

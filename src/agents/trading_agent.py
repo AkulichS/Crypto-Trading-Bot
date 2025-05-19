@@ -44,6 +44,38 @@ class WrapConv1d(nn.Module):
 #             output = output.unsqueeze(0)
 #         return output[:, -1, :]      # берём последний выход по времени
 
+class SelfAttentionBlock(nn.Module):
+    def __init__(self, in_channels=7, embed_dim=64, num_heads=2):
+        super().__init__()
+        self.conv_proj = WrapConv1d(in_channels, embed_dim)   # nn.Conv1d(in_channels, embed_dim, kernel_size=1)
+        self.attn = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
+        self.norm = nn.LayerNorm(embed_dim)
+
+    def forward(self, x):
+        x = self.conv_proj(x)                 # [B, embed_dim, T]
+        if x.dim() < 3:
+            x = x.permute(1, 0)
+        else:
+            x = x.permute(0, 2, 1)            # [B, T, embed_dim] → for attention
+        attn_out, _ = self.attn(x, x, x)      # Self-Attention
+        x = self.norm(attn_out + x)           # Residual connection
+        return x
+
+
+# class GRUWrapper(nn.Module):
+#     def __init__(self, input_size, hidden_size, batch_first=True, bidirectional=False):
+#         super().__init__()
+#         self.gru = nn.GRU(
+#             input_size=input_size,
+#             hidden_size=hidden_size,
+#             batch_first=batch_first,
+#             bidirectional=bidirectional
+#         )
+#
+#     def forward(self, x):
+#         output, _ = self.gru(x)  # игнорируем hidden state
+#         return output
+
 
 class TradingAgent:
     def __init__(self, cfg, device='cpu'):
@@ -55,18 +87,15 @@ class TradingAgent:
         self.critic = self._build_critic()
 
     def _build_actor_module(self):
-        # self.actor_lstm = LSTM(
-        #     input_size=self.cfg.model.in_dim,
-        #     hidden_size=self.cfg.model.lstm.hidden,
-        #     num_layers=self.cfg.model.lstm.layers,
-        #     device=self.device
-        # )
         actor_net = nn.Sequential(
-            WrapConv1d(self.cfg.model.in_dim, self.cfg.model.lstm.hidden),
+            # WrapConv1d(self.cfg.model.in_dim, self.cfg.model.lstm.hidden),
+            # nn.LayerNorm([self.cfg.model.lstm.hidden, self.cfg.env.window_size]),
+            SelfAttentionBlock(in_channels=self.cfg.model.in_dim, embed_dim=self.cfg.model.lstm.hidden),
             nn.Flatten(start_dim=-2),
             # WrappedLSTM(self.cfg.model.in_dim, self.cfg.model.lstm.hidden, self.cfg.model.lstm.layers),
             nn.Linear(self.cfg.model.lstm.hidden * self.cfg.env.window_size, self.cfg.model.actor.h1, device=self.device),
             nn.ReLU(),
+            nn.Dropout(p=0.2),
             nn.Linear(self.cfg.model.actor.h1, self.cfg.model.actor.h2, device=self.device),
             nn.ReLU(),
             nn.Linear(self.cfg.model.actor.h2, self.cfg.model.out_dim, device=self.device),
@@ -97,11 +126,14 @@ class TradingAgent:
         #     device=self.device
         # )
         critic_net = nn.Sequential(
-            WrapConv1d(self.cfg.model.in_dim, self.cfg.model.lstm.hidden),
+            # WrapConv1d(self.cfg.model.in_dim, self.cfg.model.lstm.hidden),
+            # nn.LayerNorm([self.cfg.model.lstm.hidden, self.cfg.env.window_size]),
+            SelfAttentionBlock(in_channels=self.cfg.model.in_dim, embed_dim=self.cfg.model.lstm.hidden),
             nn.Flatten(start_dim=-2),
             # WrappedLSTM(self.cfg.model.in_dim, self.cfg.model.lstm.hidden, self.cfg.model.lstm.layers),
             nn.Linear(self.cfg.model.lstm.hidden * self.cfg.env.window_size, self.cfg.model.critic.h1, device=self.device),
             nn.ReLU(),
+            nn.Dropout(p=0.2),
             nn.Linear(self.cfg.model.critic.h1, self.cfg.model.critic.h2, device=self.device),
             nn.ReLU(),
             nn.Linear(self.cfg.model.critic.h2, 1, device=self.device),

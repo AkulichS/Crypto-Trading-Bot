@@ -6,33 +6,33 @@ model:
     hidden: 64        # размер скрытого состояния LSTM
     layers: 1         # число слоёв
   actor:
-    h1: 256           # h1: first hidden layer
-    h2: 128
+    h1: 128           # h1: first hidden layer
+    h2: 64
   critic:
-    h1: 256
-    h2: 128
+    h1: 128
+    h2: 64
 
 # Environment
 env:
   name: TradingEnv
-  window_size: 50
+  window_size: 60
   initial_balance: 10000
   position_size: 0.05
   episode_len: 90
-  fee: 0.1
+  fee: 0.05
   nums: 1
 
 # collector
 collector:
   frames_per_batch: 5000
-  total_frames: 3500000
+  total_frames: 2000000
 
 # Optim
 optim:
   lr: 0.0005
   steps_per_batch: 5
   eps: 1.0e-5
-  weight_decay: 0.0
+  weight_decay: 1e-4
   max_grad_norm: 1.0
 #  num_epochs: 10       # optimization steps per batch of data collected
   anneal_lr: True
@@ -56,5 +56,7 @@ log:
 
 # Test
 test:
-  checkpoint_path: checkpoints/model_checkpoint_0512_020319.pth  # model_checkpoint_0510_115131.pth  # 1d   # model_checkpoint_0510_145359.pth  # 30m
+  checkpoint_path: checkpoints/model_checkpoint_0519_005141.pth
+
+  # model_checkpoint_0514_191208.pth   #model_checkpoint_0514_173917.pth  # model_checkpoint_0510_115131.pth  # 1d   # model_checkpoint_0510_145359.pth  # 30m
 

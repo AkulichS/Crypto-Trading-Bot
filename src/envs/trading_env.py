@@ -141,13 +141,6 @@ class TradingEnv(EnvBase):
             ),
         }, device=self.device)
 
-        # Добавляем в наблюдение баланс и позицию (buy/sell/hold)
-        # states["observation"] = torch.cat([
-        #     states["observation"],
-        #     torch.tensor([position], dtype=torch.float32, device=self.device),
-        #     torch.tensor([self.net_worth / self.initial_balance], dtype=torch.float32, device=self.device)
-        # ], dim=0)
-
         return states
 
 
